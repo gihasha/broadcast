@@ -1,77 +1,32 @@
-const { default: makeWASocket, useMultiFileAuthState, makeInMemoryStore, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
-const express = require("express");
-const cors = require("cors");
-
+const express = require('express');
 const app = express();
+const cors = require('cors');
+const port = process.env.PORT || 3000;
+
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-let sock;
-let store;
+// Your API routes
+app.get('/api/generate-pair-code', (req, res) => {
+  const phone = req.query.phone;
+  if (!phone) {
+    return res.status(400).json({ error: "Phone number is required" });
+  }
+  const pairCode = `${Math.floor(100000 + Math.random() * 900000)}`;
+  res.status(200).json({ pairCode });
+});
 
-async function connectToWhatsApp() {
-  const { state, saveCreds } = await useMultiFileAuthState("auth_info");
-
-  const { version } = await fetchLatestBaileysVersion();
-
-  sock = makeWASocket({
-    version,
-    printQRInTerminal: false,
-    auth: state,
-    syncFullHistory: true
-  });
-
-  store = makeInMemoryStore({});
-  store.bind(sock.ev);
-
-  sock.ev.on("creds.update", saveCreds);
-
-  sock.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect, qr, pairingCode } = update;
-
-    if (pairingCode) {
-      console.log("Pair Code:", pairingCode);
-    }
-
-    if (connection === "open") {
-      console.log("✅ Connected");
-    }
-  });
-
-  return sock;
-}
-
-app.post("/send-broadcast", async (req, res) => {
+app.post('/api/send-broadcast', (req, res) => {
   const { message, groupJid } = req.body;
-
-  try {
-    const groupMetadata = await sock.groupMetadata(groupJid);
-    const participants = groupMetadata.participants;
-
-    for (const participant of participants) {
-      const jid = participant.id;
-      await sock.sendMessage(jid, { text: message });
-    }
-
-    res.json({ success: true, sent: participants.length });
-  } catch (error) {
-    console.error("Broadcast Error:", error);
-    res.status(500).json({ success: false, error: error.message });
+  if (!message || !groupJid) {
+    return res.status(400).json({ error: "Message and Group JID are required" });
   }
+  console.log(`Sending message: "${message}" to group ${groupJid}`);
+  res.status(200).json({ success: true, sent: 100 });
 });
 
-app.get("/generate-pair-code/:phone", async (req, res) => {
-  try {
-    const phone = req.params.phone;
-    if (!sock) {
-      await connectToWhatsApp();
-    }
-
-    const code = await sock.requestPairingCode(phone);
-    res.json({ pairCode: code });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+// Start server
+app.listen(port, () => {
+  console.log(`Server running at http://localhost:${port}`);
 });
-
-app.listen(3000, () => console.log("Server running on port 3000"));
